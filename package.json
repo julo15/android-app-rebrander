@@ -1,0 +1,27 @@
+{
+  "name": "appRebrander",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "electron-prebuilt": "^0.37.5",
+    "jsonfile": "^2.2.3",
+    "mkdirp": "^0.5.1",
+    "mustache": "^2.2.1",
+    "python-shell": "^0.4.0",
+    "rimraf": "^2.5.2"
+  },
+  "devDependencies": {
+    "gulp": "^3.9.1",
+    "gulp-clean": "^0.3.2",
+    "gulp-jshint": "^2.0.0",
+    "gulp-util": "^3.0.7",
+    "jshint": "^2.9.2",
+    "jshint-stylish": "^2.1.0"
+  }
+}

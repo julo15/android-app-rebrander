@@ -1,0 +1,877 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta charset="utf-8">
+        <meta http-equiv="X-UA-Compatible" content="IE=edge">
+        <meta name="viewport" content="width=device, initial-scale=1">
+        
+        <title>Android App Rebrander</title>
+        
+        <!-- Latest compiled and minified CSS -->
+        <link rel="stylesheet" href="css/bootstrap.min.css" integrity="sha384-1q8mTJOASx8j1Au+a5WDVnPi2lkFfwwEAa8hDDdjZlpLegxhjVME1fgjWPGmkzs7" crossorigin="anonymous">
+        <link rel="stylesheet" href="css/bootstrap-colorpicker.min.css">
+        <!--<link href="docs/assets/main.css" rel="stylesheet">-->
+    </head>
+    <body>
+        
+        <!-- jQuery (necessary for Bootstrap's JavaScript plugins) -->
+        <script>window.$ = window.jQuery = require('./js/jquery.min.js');</script>
+        <!-- Latest compiled and minified JavaScript -->
+        <script src="js/bootstrap.min.js" integrity="sha384-0mSbJDEHialfmuBBQP6A4Qrprq5OVfW37PRR3j5ELqxss1yVqOtnepnHVP9aJ7xS" crossorigin="anonymous"></script>
+        
+        <script src="js/bootstrap-colorpicker.js"></script>
+        
+        <script id="colorValueTemplate" type="x-tmpl-mustache">
+            <div id="{{id}}" class="input-group colorpicker-component">
+                <input id="{{ID_PICKER}}" type="text" value="" class="form-control" />
+                <span class="input-group-addon"><i></i></span>
+            </div>
+            {{{SCRIPT_OPEN}}}$("#{{id}}").colorpicker(){{{SCRIPT_CLOSE}}}
+        </script>
+        
+        <script id="textValueTemplate" type="x-tmpl-mustache">
+            <div id="{{id}}" class="input-group">
+                <input id="{{ID_INPUT}}" type="text" class="form-control" placeholder="Text" aria-describedby="bassic-addon1">
+            </div>
+        </script>
+        
+        <script id="fileValueTemplate" type="x-tmpl-mustache">
+             <div id="{{id}}" class="input-group">
+                <span class="input-group-addon" id="basic-addon1"><img id="{{ID_THUMBNAIL}}" width=20 height=20></span>
+                <input id="{{ID_INPUT}}" type="text" class="form-control" placeholder="File path">
+                <span class="input-group-btn">
+                    <button class="btn btn-default" type="button" onclick="openFile('{{propertyName}}', '{{valueType}}')">Pick</button>
+                </span>
+            </div>
+        </script>
+        
+        <script id="boolValueTemplate" type="x-tmpl-mustache">
+            <div id="{{id}}" class="btn-group" data-toggle="buttons">
+                <label class="btn btn-sm btn-default" id="{{ID_TRUE}}">
+                    <input type="radio" value="{{VALUE_TRUE}}">True
+                </label>
+                <label class="btn btn-sm btn-default" id="{{ID_FALSE}}">
+                    <input type="radio" value="{{VALUE_FALSE}}">False
+                </label>
+            </div>
+        </script>
+        
+        <script>
+            
+            // Includes
+            var remote = require('remote');
+            var dialog = remote.require('dialog');
+            var fs = require('fs');
+            var jsonfile = require('jsonfile');
+            var mkdirp = require('mkdirp');
+            var rimraf = require('rimraf');
+            var path = require('path');
+            var app = remote.require('app');
+            var pythonshell = require('python-shell');
+            var exec = require('child_process').exec;
+            var spawn = require('child_process').spawn;
+            var shell = require('electron').shell;
+            var mustache = require('mustache');
+            
+            // Value types
+            var TYPE_COLOR = 'color';
+            var TYPE_FILE = 'file';
+            var TYPE_TTF = 'ttf';
+            var TYPE_PNG = 'png';
+            var TYPE_TEXT = 'text';
+            var TYPE_BOOL = 'bool';
+            
+            // IDs for elements inside a value html
+            var ID_NAME = 'name';
+            var ID_TYPE = 'type';
+            var ID_PICKER = 'picker';
+            var ID_INPUT = 'input';
+            var ID_THUMBNAIL = 'thumb';
+            var ID_TRUE = 'true';
+            var ID_FALSE = 'false';
+            
+            // ID suffixes for value html instances
+            var TEXT_ELEMENT_ID_SUFFIX = '-text';
+            var COLOR_ELEMENT_ID_SUFFIX = '-cp';
+            var BOOL_ELEMENT_ID_SUFFIX = '-bool';
+            
+            // Values for bool fields
+            var VALUE_TRUE = 'true';
+            var VALUE_FALSE = 'false';
+            
+            // Mustache templates for value html types
+            var VALUE_HTML_TEMPLATES = {};
+                VALUE_HTML_TEMPLATES[TYPE_COLOR] = 'colorValueTemplate';
+                VALUE_HTML_TEMPLATES[TYPE_TEXT] = 'textValueTemplate';
+                VALUE_HTML_TEMPLATES[TYPE_FILE] = 'fileValueTemplate';
+                VALUE_HTML_TEMPLATES[TYPE_TTF] = 'fileValueTemplate';
+                VALUE_HTML_TEMPLATES[TYPE_PNG] = 'fileValueTemplate';
+                VALUE_HTML_TEMPLATES[TYPE_BOOL] = 'boolValueTemplate';
+            
+            // User settings
+            var SETTING_TEMPLATE_FILE_PATH = 'templateFilePath';
+            var SETTING_SOURCE_PATH = 'sourceRootPath';
+            var SETTING_ADB_PATH = 'adbPath';
+            var SETTING_BUILD_PLATFORM = 'buildPlatform';
+            var SETTING_ANDROID_SIGNING_KEY_PASSWORD = 'androidSigningKeyPassword';
+            
+            var SETTINGS_FILE = path.join(app.getPath('userData'), 'settings.json');
+            var DEFAULT_TEMPLATE_FILE = path.join(__dirname, 'template.json');
+            var ANDROID_BRAND_SCRIPT_FILE_NAME = 'brand_it.py'; // assumed to be in __dirname, i.e. packaged with the app
+            
+            // If defined, this indicates that there is a saved theme open in the app.
+            // The value will be the folder path of the theme.
+            var currentThemeFolderPath;
+            
+            // Stores the user settings, and is kept in sync with SETTINGS_FILE.
+            var userSettings;
+            
+            // Either 'android' or 'ios'. Used to know which platform to make/install with.
+            var buildPlatform;
+            
+            var androidSigningKeyPassword;
+            
+            // Constructs the id of a value html row, which is simply the property name followed by 
+            // a suffix indicating what type the property is (text field, color field, etc.).            
+            function getValueHtmlId(propertyName, valueType) {
+                var suffix;
+                if (valueType === TYPE_COLOR) {
+                    suffix = COLOR_ELEMENT_ID_SUFFIX;
+                } else if (valueType === TYPE_TTF || valueType === TYPE_FILE || valueType === TYPE_PNG || valueType === TYPE_TEXT) {
+                    suffix = TEXT_ELEMENT_ID_SUFFIX;
+                } else if (valueType === TYPE_BOOL) {
+                    suffix = BOOL_ELEMENT_ID_SUFFIX;
+                } else {
+                    throw new Error("Unknown valueType " + valueType);
+                }
+                return propertyName + suffix;
+            }
+            
+            // Updates the value of a value html row.
+            function setValueOfValueHtml(propertyName, valueType, value) {
+                var id = getValueHtmlId(propertyName, valueType);
+                if (valueType === TYPE_COLOR) {
+                    $("#" + id).colorpicker('setValue', value);
+                } else if (valueType === TYPE_TEXT || valueType === TYPE_FILE || valueType === TYPE_TTF || valueType === TYPE_PNG) {
+                    var div = $("#" + id);
+                    var inp = div.find("#" + ID_INPUT);
+                    inp.val(value);
+                    
+                    if (valueType === TYPE_PNG) {
+                        $(div).find("#" + ID_THUMBNAIL).attr("src", value);
+                    }
+                } else if (valueType === TYPE_BOOL) {
+                    var labelId;
+                    if (value === true) {
+                        labelId = ID_TRUE;
+                    } else if (value === false || value === null) {
+                        labelId = ID_FALSE;
+                    } else {
+                        throw new Error("Unexpected value for bool type " + value);
+                    }
+                    $("#" + id + " #" + labelId).click();
+                } else {
+                    throw new Error("Unknown valueType " + valueType);
+                }
+            }
+            
+            // Retrieves value from a value html row.
+            function getValueOfValueHtml(propertyName, valueType) {
+                var id = getValueHtmlId(propertyName, valueType);
+                if (valueType === TYPE_COLOR) {
+                    return $("#" + id).colorpicker('getValue');
+                } else if (valueType === TYPE_TEXT || valueType === TYPE_FILE || valueType === TYPE_TTF || valueType === TYPE_PNG) {
+                    return $("#" + id).find("#" + ID_INPUT).val();
+                } else if (valueType === TYPE_BOOL) {
+                    var rawValue = $('#' + id + ' label.active input').val();
+                    if (rawValue === VALUE_TRUE) {
+                        return true;
+                    } else if (rawValue === VALUE_FALSE || rawValue === null) {
+                        return false;
+                    } else {
+                        throw new Error("Unexpected value " + rawValue);
+                    }
+                }
+            }
+            
+            // Constructs and returns the html for a value html row.
+            // A value html row is a <div> row representing a single property (e.g. logoBackgroundImage, submitButtonTextColor).
+            // This function will return html that is appropriate for the property's type.
+            // In general, the outer <div> is given a unique id, and subelements are given generic ids (e.g. ID_PICKER).
+            // Getting/setting the value in these rows are done via getValueOfValueHtml and setValueOfValueHtml.
+            function getValueHtml(propertyName, valueType) {
+                var data = {
+                    id: getValueHtmlId(propertyName, valueType),
+                    propertyName: propertyName,
+                    valueType: valueType,
+                    
+                    // constants
+                    ID_PICKER: ID_PICKER,
+                    ID_INPUT: ID_INPUT,
+                    ID_THUMBNAIL: ID_THUMBNAIL,
+                    ID_TRUE: ID_TRUE,
+                    ID_FALSE: ID_FALSE,
+                    VALUE_TRUE: VALUE_TRUE,
+                    VALUE_FALSE: VALUE_FALSE,
+                    SCRIPT_OPEN: '<script>',
+                    SCRIPT_CLOSE: '</' + 'script>'
+                };
+                
+                var template = $('#' + VALUE_HTML_TEMPLATES[valueType]).html();
+                mustache.parse(template);
+                return mustache.render(template, data);
+            }
+            
+            function getCellWithIdHtml(html, id) {
+                return "<td id='" + id + "'>" + html + "</td>";
+            }
+            
+            function getCellHtml(html) {
+                return "<td>" + html + "</td>";
+            }
+            
+            function getRowHtml(property, description, type, valueHtml) {
+                return "<tr>" +
+                    getCellWithIdHtml(property, ID_NAME) +
+                    getCellHtml(description) +
+                    getCellWithIdHtml(type, ID_TYPE) + // used when generating
+                    getCellHtml(valueHtml) +
+                    "</tr>";
+            }
+            
+            // Populates the main table with all the fields described in the parameters object.
+            function loadTemplate(parameters) {
+                mainTable.empty();
+                for (var i = 0; i < parameters.length; i++) {
+                    var name = parameters[i].name;
+                    var desc = parameters[i].desc;
+                    var type = parameters[i].type;
+                    mainTable.append(getRowHtml(name, desc, type, getValueHtml(name, type)));
+                }
+            }
+            
+            // Reads the template parameters from the file path given and populates main table appropriately.
+            // Optionally saves the template file path to the user's settings.
+            function changeTemplate(templateFilePath, saveToSettings) {
+                var useDefault = (templateFilePath === null);
+                templateFilePath = useDefault ? DEFAULT_TEMPLATE_FILE : templateFilePath;
+                jsonfile.readFile(templateFilePath, function(err, obj) {
+                    if (err) {
+                        alert(err);
+                        return;
+                    }
+                    
+                    setCurrentTheme(undefined);
+                    loadTemplate(obj);
+                    
+                    var templateLabel = useDefault ? "Default Android" : templateFilePath;
+                    $("#templateSpan").html(templateLabel);
+                    
+                    if (saveToSettings) {
+                        userSettings[SETTING_TEMPLATE_FILE_PATH] = useDefault ? null : templateFilePath;
+                        saveUserSettings();
+                    }
+                });
+            }
+            
+            function pickTemplate() {
+                pickFile("json", function(filePath) {
+                    changeTemplate(filePath, true /* saveToSettings */);
+                });
+            }
+            
+            function useDefaultTemplate() {
+                changeTemplate(null, true /* saveToSettings */);
+            }
+            
+            function setThemeLabel(label) {
+                $("#themePathSpan").text(label);
+            }
+            
+            function setCurrentTheme(path) {
+                currentThemeFolderPath = path;
+                setThemeLabel((path !== undefined) ? currentThemeFolderPath : "Untitled theme");
+            }
+            
+            function setSettingValue(settingName, settingSpanName, settingValue, saveToSettings) {
+                $("#" + settingSpanName).html((settingValue !== null) ? settingValue : 'Not set');
+                
+                if (saveToSettings) {
+                    userSettings[settingName] = settingValue;
+                    saveUserSettings();
+                }
+            }
+            
+            function setSourceRoot(sourceRootPath, saveToSettings) {
+                setSettingValue(SETTING_SOURCE_PATH, "sourceRootSpan", sourceRootPath, saveToSettings);
+            }
+            
+            function pickSourceRoot() {
+                pickFolder(function(folderPath) {
+                    setSourceRoot(folderPath, true /* saveToSettings */);
+                });
+            }
+            
+            function setAdbPath(adbPath, saveToSettings) {
+                setSettingValue(SETTING_ADB_PATH, "adbPathSpan", adbPath, saveToSettings);
+            }
+            
+            function pickAdbPath() {
+                pickFile(null, function(filePath) {
+                    setAdbPath(filePath, true /* saveToSettings */);
+                });
+            }
+                        
+            function setBuildPlatform(newBuildPlatform, saveToSettings) {
+                if (newBuildPlatform === null || newBuildPlatform === undefined) {
+                    newBuildPlatform = 'android';
+                }
+                setSettingValue(SETTING_BUILD_PLATFORM, "buildPlatformSpan", newBuildPlatform, saveToSettings);
+                buildPlatform = newBuildPlatform;
+            }
+            
+            function setAndroidSigningKeyPassword(password, saveToSettings) {
+                $("#androidSigningKeyPasswordSpan").html((password !== null) ? 'Set' : 'Not set');
+                
+                if (saveToSettings) {
+                    userSettings[SETTING_ANDROID_SIGNING_KEY_PASSWORD] = password;
+                    saveUserSettings();
+                }
+            }
+            
+            function pickAndroidSigningKeyPassword() {
+                var password = prompt('Enter the password');
+                if (password !== null) {
+                    setAndroidSigningKeyPassword(password, true /* saveToSettings */);
+                }
+            }
+            
+            function pickFolder(thenFunction) {
+                dialog.showOpenDialog({ properties: ['openDirectory'] }, function(folderPath) {
+                    if (folderPath !== undefined) {
+                        folderPath = folderPath[0]; // un-array it
+                        thenFunction(folderPath);
+                    }
+                });
+            }
+            
+            function pickFile(extension, thenFunction) {
+                var options = null;
+                if (extension) {
+                    options = {
+                        filters: [ { name: extension, extensions: [extension] } ]
+                    };
+                }
+                
+                dialog.showOpenDialog(options, function (filenames) {
+                    if (filenames !== undefined) {
+                        filenames = filenames[0]; // un-array
+                        thenFunction(filenames);                      
+                    }
+                });
+            }
+            
+            function openFile(propertyName, valueType) {
+                var extension = (valueType === TYPE_FILE) ? null : valueType;
+                pickFile(extension, function(filePath) {
+                    setValueOfValueHtml(propertyName, valueType, filePath);
+                });
+            }
+            
+            function newTheme() {
+                mainTable.children().each(function() {
+                    var name = $(this).find("#" + ID_NAME).html();
+                    var type = $(this).find("#" + ID_TYPE).html();
+                    setValueOfValueHtml(name, type, null);
+                });
+                
+                setCurrentTheme(undefined);
+            }
+            
+            function saveThemeAs() {
+                dialog.showSaveDialog({ properties: ['openDirectory'] }, function(themeFolderPath) {
+                    if (themeFolderPath !== undefined) {
+                        saveTheme(themeFolderPath, true /* setAsCurrent */);
+                    }
+                });
+            }
+            
+            function saveCurrentTheme() {
+                saveTheme(currentThemeFolderPath, false /* setAsCurrent */);
+            }
+            
+            function saveTheme(themeFolderPath, setAsCurrent) {
+                
+                if (themeFolderPath === undefined) {
+                    saveThemeAs();
+                    return;
+                }
+                
+                var removeOldFolder = false;
+                                        
+                new Promise(function(resolve, reject) {
+                    // remove old folder
+                    if (removeOldFolder) {
+                        rimraf(themeFolderPath, function(err) {
+                            err ? reject(err) : resolve();
+                        });
+                    } else {
+                        resolve();
+                    }
+                }).then(function() {
+                    // create new folder
+                    return new Promise(function(resolve, reject) {
+                        mkdirp(themeFolderPath, function(err) {
+                            err ? reject(err) : resolve();
+                        });
+                    });
+                }).then(function() {
+                    // loop through each row and build output json
+                    return new Promise(function(resolve, reject) {
+                        var output = {};
+                        mainTable.children().each(function() {
+                            var name = $(this).find("#" + ID_NAME).html();
+                            var type = $(this).find("#" + ID_TYPE).html();
+                            var value = getValueOfValueHtml(name, type);
+                            
+                            if (type === TYPE_FILE || type === TYPE_TTF || type === TYPE_PNG) {
+                                var source = value;
+                                if (source === "") {
+                                    return;
+                                }
+                                
+                                var extension = path.extname(source);
+                                value = name + (extension.length > 0 ? extension : "");
+                                var dest = path.join(themeFolderPath, value);
+                                if (source !== dest) {
+                                    var readStream = fs.createReadStream(source);
+                                    readStream.pipe(fs.createWriteStream(dest));
+                                }
+                            }
+                            
+                            output[name] = value;
+                        });
+                        
+                        resolve(output);
+                    });
+                }).then(function(parameters) {
+                    // write output json file
+                    return new Promise(function(resolve, reject) {
+                        jsonfile.writeFile(path.join(themeFolderPath, 'parameters.json'), parameters, {spaces: 2}, function(err) {
+                            err ? reject(err) : resolve();
+                        });
+                    });
+                }).then(function() {
+                    alert('Saved!');
+                    if (setAsCurrent) {
+                        setCurrentTheme(themeFolderPath);
+                    }
+                }).catch(function(err) {
+                    alert('Save failed! ' + err);
+                });
+            }
+            
+            function openTheme() {
+                pickFolder(function(folderPath) {
+                    new Promise(function(resolve, reject) {
+                        jsonfile.readFile(path.join(folderPath, 'parameters.json'), function(err, obj) {
+                            err ? reject(err) : resolve(obj);
+                        });
+                    }).then(function(settings) {
+                        var missingProperties = [];
+                        mainTable.children().each(function() {
+                            var name = $(this).find("#" + ID_NAME).html();
+                            var type = $(this).find("#" + ID_TYPE).html();
+                            var value = "";
+                            
+                            if (settings[name] !== undefined) {
+                                if (type === TYPE_TTF || type === TYPE_PNG) {
+                                    setValueOfValueHtml(name, type, path.join(folderPath, settings[name]));
+                                } else {
+                                    setValueOfValueHtml(name, type, settings[name]);
+                                }
+                            } else {
+                                missingProperties.push(name);
+                            }
+                        });
+                        return missingProperties;
+                    }).then(function(missing) {
+                        setCurrentTheme(folderPath);
+                        if (missing.length > 0) {
+                            alert('FYI: The theme was missing the following properties:\n' + missing);
+                        }
+                    }).catch(function(err) {
+                        alert('fail! ' + err);
+                    });
+                });
+            }
+            
+            function appendToStatusTable(message) {
+                statusTable.append(message + '<br />');
+                statusTable.scrollTop(statusTable.prop('scrollHeight'));
+            }
+            
+            // Starts or stops the progress bar. This method expects one of three parameter values:
+            // - true: start the progress bar with default colour
+            // - false: stop the progress bar with success colour
+            // - undefined: stop the progress bar with failed colour
+            function startProgress(active) {
+                if (active === true) {
+                    statusProgressBar.addClass('active');
+                    statusProgressBar.removeClass('progress-bar-success');
+                    statusProgressBar.removeClass('progress-bar-danger');
+                    $("#statusCloseButton").prop('disabled', true);
+                    $("#statusOpenOutputFolderButton").prop('disabled', true);
+                    $("#statusInstallAppButton").prop('disabled', true);
+                } else {
+                    statusProgressBar.removeClass('active');
+                    statusProgressBar.addClass((active === false) ? 'progress-bar-success' : 'progress-bar-danger');
+                    $("#statusCloseButton").prop('disabled', false);
+                    $("#statusOpenOutputFolderButton").prop('disabled', (active !== false));
+                    $("#statusInstallAppButton").prop('disabled', (active !== false));
+                }
+            }
+            
+            // Build platforms, representing platforms that the tool can build/install for.
+            // Both platforms expose the following three methods:
+            // - getAppPath: returns the location that the app package file would exist.
+            //   This should be a subdirectory of currentThemeFolderPath
+            // - makeAppPromise: returns a Promise to build the app on the given platform.
+            // - installAppPromise: returns a Promise to install the app on the given platform.
+            var platforms = {
+                // Android platform class
+                android: {
+                    getAppPath: function() {
+                        if (currentThemeFolderPath !== undefined) {
+                            return path.join(currentThemeFolderPath, 'android', 'app/build/outputs/apk/app-release.apk');
+                        }
+                        return 'badpath'; // hack so that fs.access doesn't throw an error
+                    },
+                    
+                    makeAppPromise: function() {
+                        var that = this;
+                        return new Promise(function(resolve, reject) {
+                            var options = {
+                                scriptPath: __dirname,
+                                args: [
+                                    currentThemeFolderPath,
+                                    getUserSettingValue(SETTING_SOURCE_PATH),
+                                    getUserSettingValue(SETTING_ANDROID_SIGNING_KEY_PASSWORD)
+                                ]
+                            };
+                            
+                            var script = new pythonshell(ANDROID_BRAND_SCRIPT_FILE_NAME, options);
+                            
+                            script.on('message', function(message) {
+                                appendToStatusTable(message);
+                                console.log(message);
+                            });
+                            
+                            script.end(function(err) {
+                                fs.access(that.getAppPath(), fs.R_OK, function(errExists) {
+                                    appendToStatusTable('');
+                                    appendToStatusTable(errExists ? 'APP BUILD FAILED' : 'APP BUILD SUCCEEDED. Click the open app button to access the apk.');
+                                    if (err) {
+                                        appendToStatusTable('');
+                                        appendToStatusTable('Additional output below:');
+                                        appendToStatusTable(err);
+                                    }
+                                    
+                                    errExists ? reject(errExists) : resolve();
+                                });
+                            });
+                        });
+                    },
+                    
+                    installAppPromise: function() {
+                        var that = this;
+                        return new Promise(function(resolve, reject) {
+                            var adbPath = getUserSettingValue(SETTING_ADB_PATH);                
+
+                            var args = [
+                                'uninstall', getValueOfValueHtml('package', TYPE_TEXT)
+                            ];
+                            
+                            try {
+                                var uninstall = spawn(adbPath, ['uninstall', getValueOfValueHtml('package', TYPE_TEXT)]);
+                                
+                                uninstall.stdout.on('data', function(data) {
+                                    appendToStatusTable('uninstall(out): ' + data);
+                                });
+                                uninstall.stderr.on('data', function(data) {
+                                    appendToStatusTable('uninstall(ERR): ' + data);
+                                });
+                                uninstall.on('close', function(code) {
+                                    appendToStatusTable('uninstall(close): ' + code);
+                                    
+                                    var install = spawn(adbPath, ['install', that.getAppPath()]);
+                                    
+                                    install.stdout.on('data', function(data) {
+                                        appendToStatusTable('install(out): ' + data);
+                                    });
+                                    install.stderr.on('data', function(data) {
+                                        appendToStatusTable('install(ERR): ' + data);
+                                    });
+                                    install.on('close', function(code) {
+                                        appendToStatusTable('install(close): ' + code);
+                                        (code === 0) ? resolve() : reject(code);        
+                                    });
+                                });
+                            } catch(err) {
+                                appendToStatusTable(err);
+                                reject(err);
+                            }
+                        });
+                    }
+                },
+            
+                // iOS platform class
+                ios: {
+                    getAppPath: function() {
+                        return undefined;
+                    },
+                    
+                    makeAppPromise: function() {
+                        return new Promise(function(resolve, reject) {
+                            reject('Not implemented');
+                        });
+                    },
+                    
+                    installAppPromise: function() {
+                        return new Promise(function(resolve, reject) {
+                            reject('Not implemented');
+                        });
+                    }
+                }
+            };
+            
+            function makeApp() {
+                startProgress(true);
+                statusTable.empty();
+                                
+                platforms[buildPlatform].makeAppPromise()
+                .then(function() {
+                    startProgress(false);
+                }).catch(function(err) {
+                    startProgress(undefined);
+                });
+            }
+            
+            function openAppFolder() {
+                shell.showItemInFolder(platforms[buildPlatform].getAppPath());
+            }
+            
+            function installApp() {
+                startProgress(true);
+                
+                platforms[buildPlatform].installAppPromise()
+                .then(function() {
+                    startProgress(false);
+                }).catch(function(err) {
+                    startProgress(undefined);
+                });
+            }
+            
+        </script>
+        
+        <div class="container">
+            <h1>Android App Rebrander</h1>
+            
+            <!-- Buttons area -->
+            <div class="row">
+                <div class="col-md-5">
+                    <button type="button" class="btn btn-sm btn-default" onclick="newTheme()">New</button>
+                    <button type="button" class="btn btn-sm btn-default" onclick="openTheme()">Open</button>
+                    <button type="button" class="btn btn-sm btn-default" onclick="saveCurrentTheme()">Save</button>
+                    <button type="button" class="btn btn-sm btn-default" onclick="saveThemeAs()">Save as...</button>
+                    <button id="makeAppButton" type="button" class="btn btn-sm btn-primary" data-toggle="modal" data-target="#statusModal" onclick="makeApp()">Make app</button>                                                 
+                    <h3>
+                        Theme:
+                        <span id="themePathSpan" class="label label-primary"></span>
+                    </h3>
+                </div>
+            </div>
+            
+            <!-- Main table -->
+            <div class="row">
+                <div class="col-md-10">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>Property</th>
+                                <th>Description</th>
+                                <th>Type</th>
+                                <th>Value</th>
+                            </tr>
+                        </thead>
+                        <tbody id="mainTable">
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            
+            <!-- Settings area -->
+            <div class="row">
+                <div class="col-md-5">
+                    <h5>Settings</h5>
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th style="width: 20%;">Name</th>
+                                <th style="width: 60%;">Value</th>
+                                <th style="width: 20%;">Options</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td>Template</td>
+                                <td><span id="templateSpan" class="label label-info"></span></td>
+                                <td>
+                                    <button class="btn btn-xs btn-default" type="button" onclick="pickTemplate()">Pick</button>
+                                    <button class="btn btn-xs btn-default" type="button" onclick="useDefaultTemplate()">Use default</button>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td>Build platform</td>
+                                <td><span id="buildPlatformSpan" class="label label-info"></span></td>
+                                <td>
+                                    Use:
+                                    <button class="btn btn-xs btn-default" type="button" onclick="setBuildPlatform('android', true)">android</button>
+                                    <button class="btn btn-xs btn-default" type="button" onclick="setBuildPlatform('ios', true)">iOS</button>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td>Source root</td>
+                                <td><span id="sourceRootSpan" class="label label-info"></span></td>
+                                <td>
+                                    <button class="btn btn-xs btn-default" type="button" onclick="pickSourceRoot()">Pick</button>
+                                    <button class="btn btn-xs btn-default" type="button" onclick="setSourceRoot(null, true)">Clear</button>
+                                </td>
+                            </tr>
+                                <td>ADB path</td>
+                                <td><span id="adbPathSpan" class="label label-info"></span></td>
+                                <td>
+                                    <button class="btn btn-xs btn-default" type="button" onclick="pickAdbPath()">Pick</button>
+                                    <button class="btn btn-xs btn-default" type="button" onclick="setAdbPath(null, true)">Clear</button>
+                                </td>
+                            </tr>
+                            </tr>
+                                <td>Android signing key password</td>
+                                <td><span id="androidSigningKeyPasswordSpan" class="label label-info"></span></td>
+                                <td>
+                                    <button class="btn btn-xs btn-default" type="button" data-toggle="modal" data-target="#passwordModal">Set</button>
+                                    <button class="btn btn-xs btn-default" type="button" onclick="setAndroidSigningKeyPassword(null, true)">Clear</button>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>            
+            </div>
+        </div>
+
+        <!-- Status modal dialog -->
+        <div class="modal fade" id="statusModal" tabindex="-1" role="dialog" aria-labelledby="statusModalLabel" data-keyboard="false" data-backdrop="static">
+            <div class="modal-dialog" role="document">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                            <span aria-hidden="true">&times;</span>
+                        </button>
+                        <h4 class="modal-title" id="statusModalLabel">Action in progress</h4>
+                    </div>
+                    <div class="modal-body">
+                        <div class="progress">
+                            <div id="statusProgressBar" class="progress-bar progress-bar-striped" role="progressbar" aria-valuenow="1" aria-valuemin="0" aria-valuemax="1" style="width: 100%">
+                                <span class="sr-only">In progress</span>
+                            </div>
+                        </div>
+                        <div id="statusTable" style="height: 300px; overflow: scroll"></div>
+                        </table>
+                    </div>
+                    <div class="modal-footer">
+                        <button id="statusOpenOutputFolderButton" type="button" class="btn btn-primary" onclick="openAppFolder()">Open app folder</button>
+                        <button id="statusInstallAppButton" type="button" class="btn btn-primary" onclick="installApp()">Install app</button>
+                        <button id="statusCloseButton" type="button" class="btn btn-default" data-dismiss="modal">Close</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Password modal dialog -->
+        <div class="modal fade" id="passwordModal" tabindex="-1" role="dialog" aria-labelledby="passwordModalLabel" data-keyboard="false" data-backdrop="static">
+            <div class="modal-dialog modal-sm" role="document">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                            <span aria-hidden="true">&times;</span>
+                        </button>
+                        <h4 class="modal-title" id="statusModalLabel">Enter password</h4>
+                    </div>
+                    <div class="modal-body">
+                        <input id="passwordInput" type="password" class="form-control">
+                    </div>
+                    <div class="modal-footer">
+                        <button id="passwordOkButton" type="button" class="btn btn-primary" onclick="setAndroidSigningKeyPassword($('#passwordInput').val(), true)" data-dismiss="modal">OK</button>
+                        <button id="passwordCancelButton" type="button" class="btn btn-default" data-dismiss="modal">Cancel</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <script>
+            
+            // HTML elements
+            var mainTable = $("#mainTable");
+            var statusTable = $("#statusTable");
+            var statusProgressBar = $("#statusProgressBar");
+
+            function getUserSettingValue(property) {
+                if (userSettings === undefined) {
+                    throw new Error('User settings not loaded yet');
+                }
+                
+                if (userSettings[property] === undefined) {
+                    return null;
+                }
+                
+                return userSettings[property];
+            }
+            
+            function saveUserSettings() {
+                jsonfile.writeFile(SETTINGS_FILE, userSettings, { spaces: 2 }, function(err) {
+                    if (err) {
+                        alert('Failed to save user setting. ' + err);
+                    }
+                });
+            }
+
+            // Starting point: Try loading the user settings file.
+            // Whether or not it exists, we then call changeTemplate to load
+            // the desired template to populate the list of properties.
+            console.log('Initializing with settings file: ' + SETTINGS_FILE);
+            jsonfile.readFile(SETTINGS_FILE, function(err, obj) {
+                
+                // Read userSettings
+                userSettings = {};
+                                
+                if (err) {
+                    if (err.code === 'ENOENT') {
+                        console.log('No settings file found. Using default settings.');
+                    } else {
+                        console.err('Failed to open settings file: ' + err);
+                    }
+                } else {
+                    console.log('Successfully read settings file.');
+                    userSettings = obj;
+                }
+                
+                changeTemplate(getUserSettingValue(SETTING_TEMPLATE_FILE_PATH), false /* saveToSettings */);                
+                setSourceRoot(getUserSettingValue(SETTING_SOURCE_PATH), false /* saveToSettings */);
+                setAdbPath(getUserSettingValue(SETTING_ADB_PATH), false /* saveToSettings */);
+                setBuildPlatform(getUserSettingValue(SETTING_BUILD_PLATFORM), false /* saveToSettings */);
+                setAndroidSigningKeyPassword(getUserSettingValue(SETTING_ANDROID_SIGNING_KEY_PASSWORD), false /* saveToSettings */);
+            });
+        </script>
+            
+    </body>
+</html>

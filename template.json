@@ -1,0 +1,340 @@
+[
+    {
+        "name": "brandName",
+        "type": "text",
+        "desc": "Used in Android. No spaces allowed"
+    },
+    {
+        "name": "versionCode",
+        "type": "text",
+        "desc": ""
+    },
+    {
+        "name": "versionName",
+        "type": "text",
+        "desc": ""
+    },
+    {
+        "name": "package",
+        "type": "text",
+        "desc": "e.g. com.example.fooapp"
+    },
+    {
+        "name": "label",
+        "type": "text",
+        "desc": "App name shown on the phone's launcher"
+    },
+    {
+        "name": "eula",
+        "type": "file",
+        "desc": "EULA HTML file"
+    },
+    {
+        "name": "appLogoAndroid48x48",
+        "type": "png",
+        "desc": "App logo shown on the phone's launcher"
+    },
+    {
+        "name": "appLogoAndroid72x72",
+        "type": "png",
+        "desc": "App logo shown on the phone's launcher"
+    },
+    {
+        "name": "appLogoAndroid96x96",
+        "type": "png",
+        "desc": "App logo shown on the phone's launcher"
+    },
+    {
+        "name": "appLogoAndroid144x144",
+        "type": "png",
+        "desc": "App logo shown on the phone's launcher"
+    },
+    {
+        "name": "appLogoAndroid192x192",
+        "type": "png",
+        "desc": "App logo shown on the phone's launcher"
+    },
+    {
+        "name": "appLogoAndroid512x512",
+        "type": "png",
+        "desc": "App logo shown on the phone's launcher"
+    },
+    {
+        "name": "logo",
+        "type": "png",
+        "desc": "App logo shown in the app"
+    },
+    {
+        "name": "logoLowDpi",
+        "type": "png",
+        "desc": "App logo shown in the app on low DPI devices"
+    },
+    {
+        "name": "isLogoPortrait",
+        "type": "bool",
+        "desc": "True if the logo is portrait"
+    },
+    {
+        "name": "quicksandFont",
+        "type": "ttf",
+        "desc": ""
+    },
+    {
+        "name": "quicksandBoldFont",
+        "type": "ttf",
+        "desc": ""
+    },
+    {
+        "name": "quicksandLightFont",
+        "type": "ttf",
+        "desc": ""
+    },
+
+    {
+        "name": "bamsOperatorId",
+        "type": "text",
+        "desc": "Operator ID passed into api/v1/GetGGE4Params to get branded BAMS page"
+    },
+
+    {
+        "name": "loginWelcomeText",
+        "type": "text",
+        "desc": ""
+    },
+
+    {
+        "name": "submitButtonTextColor",
+        "type": "color",
+        "desc": "Sign in/out buttons, done buttons, reload denomination buttons, reload button, support 'how to' buttons"
+    },
+    {
+        "name": "submitButtonBgColor",
+        "type": "color",
+        "desc": ""
+    },
+    {
+        "name": "titleTextColor",
+        "type": "color",
+        "desc": "Used for all titlebars in the app"
+    },
+    {
+        "name": "titleBgColor",
+        "type": "color",
+        "desc": ""
+    },
+    
+    
+    {
+        "name": "loginTextColor",
+        "type": "color",
+        "desc": "For any text that appears on top of loginBackgroundImage"
+    },
+    {
+        "name": "loginBackgroundImage",
+        "type": "png",
+        "desc": "Email/pin login, how to register, forgot password, reset pin screens"
+    },
+    {
+        "name": "loginEmailIcon",
+        "type": "png",
+        "desc": ""
+    },
+    {
+        "name": "loginPasswordIcon",
+        "type": "png",
+        "desc": ""
+    },
+    {
+        "name": "registerStepCardImage",
+        "type": "png",
+        "desc": ""
+    },
+    {
+        "name": "registerStepLinkImage",
+        "type": "png",
+        "desc": ""
+    },
+    {
+        "name": "registerStepSendImage",
+        "type": "png",
+        "desc": ""
+    },
+
+
+    {
+        "name": "backIcon",
+        "type": "png",
+        "desc": ""
+    },
+    {
+        "name": "menuIcon",
+        "type": "png",
+        "desc": ""
+    },
+    {
+        "name": "menuBackgroundImage",
+        "type": "png",
+        "desc": ""
+    },
+    {
+        "name": "menuTextColor",
+        "type": "color",
+        "desc": ""
+    },
+    {
+        "name": "menuMyAccountIcon",
+        "type": "png",
+        "desc": ""
+    },
+    {
+        "name": "menuSupportIcon",
+        "type": "png",
+        "desc": ""
+    },
+    {
+        "name": "menuPayIcon",
+        "type": "png",
+        "desc": ""
+    },
+    {
+        "name": "menuOffersIcon",
+        "type": "png",
+        "desc": ""
+    },
+    {
+        "name": "menuReloadIcon",
+        "type": "png",
+        "desc": ""
+    },
+    {
+        "name": "menuHistoryIcon",
+        "type": "png",
+        "desc": ""
+    },
+    {
+        "name": "menuSelectedBgColor",
+        "type": "color",
+        "desc": "Bg color when a menu item is selected"
+    },
+    {
+        "name": "menuSelectedTextColor",
+        "type": "color",
+        "desc": ""
+    },
+    {
+        "name": "menuSelectedMyAccountIcon",
+        "type": "png",
+        "desc": ""
+    },
+    {
+        "name": "menuSelectedSupportIcon",
+        "type": "png",
+        "desc": ""
+    },
+    {
+        "name": "menuSelectedPayIcon",
+        "type": "png",
+        "desc": ""
+    },
+    {
+        "name": "menuSelectedOffersIcon",
+        "type": "png",
+        "desc": ""
+    },
+    {
+        "name": "menuSelectedReloadIcon",
+        "type": "png",
+        "desc": ""
+    },
+    {
+        "name": "menuSelectedHistoryIcon",
+        "type": "png",
+        "desc": ""
+    },
+
+
+
+
+    {
+        "name": "payButtonImage",
+        "type": "png",
+        "desc": ""
+    },
+    {
+        "name": "offersButtonImage",
+        "type": "png",
+        "desc": ""
+    },
+    {
+        "name": "reloadButtonImage",
+        "type": "png",
+        "desc": ""
+    },
+    {
+        "name": "historyButtonImage",
+        "type": "png",
+        "desc": ""
+    },
+    {
+        "name": "payButtonTextColor",
+        "type": "color",
+        "desc": ""
+    },
+    {
+        "name": "offersButtonTextColor",
+        "type": "color",
+        "desc": ""
+    },
+    {
+        "name": "reloadButtonTextColor",
+        "type": "color",
+        "desc": ""
+    },
+    {
+        "name": "historyButtonTextColor",
+        "type": "color",
+        "desc": ""
+    },
+
+
+    {
+        "name": "scanToPayTextColor",
+        "type": "color",
+        "desc": ""
+    },
+
+
+    {
+        "name": "reloadDenominationUnselectedTextColor",
+        "type": "color",
+        "desc": "Text color of the $10/$20/$50 buttons when not selected"  
+    },
+    {
+        "name": "reloadDenominationUnselectedBgColor",
+        "type": "color",
+        "desc": "Background color of the $10/$20/$50 buttons when not selected"  
+    },
+    {
+        "name": "creditCardOutlineColor",
+        "type": "color",
+        "desc": "Outline colour when a credit card is selected"
+    },
+    {
+        "name": "addCardIcon",
+        "type": "png",
+        "desc": ""
+    },
+    {
+        "name": "addCardTextColor",
+        "type": "color",
+        "desc": ""
+    },
+
+
+
+    {
+        "name": "offersHighlightTextColor",
+        "type": "color",
+        "desc": ""
+    }
+]
